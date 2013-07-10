@@ -1,10 +1,11 @@
 module Main
        where
 
+import Control.Applicative ((<$>))
 import Control.Monad (liftM, when)
 import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
-import System.Environment (getArgs)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess, exitWith)
 import System.FilePath (dropExtension)
 import System.IO (hPutStrLn, stderr)
@@ -110,7 +111,12 @@ usage =
   "(both for GHC and ghc-parmake itself).\n" ++
   "--help           - Print usage information.\n" ++
   "-V               - Print version information.\n" ++
-  "\nOther options are passed to GHC unmodified.\n"
+  "\n" ++
+  "Setting the environment variable SKIP_TIME_CHECK to anything different from \"0\"\n" ++
+  "will cause ghc-parmake to skip all modification time checks (all modules\n" ++
+  "will be compiled in the ghc -c step).\n" ++
+  "\n" ++
+  "Other options are passed to GHC unmodified.\n"
 
 guessOutputFilename :: Maybe FilePath -> [FilePath] -> Maybe FilePath
 guessOutputFilename (Just n) _  = Just n
@@ -196,8 +202,11 @@ main =
      let plan = BuildPlan.new deps
      debug' v ("Produced a build plan:\n" ++ show plan)
 
+     let parseTimeCheck s = s /= "0" -- Everything /= 0 counts as "skip"
+     skipTimeCheck <- maybe False parseTimeCheck <$> lookupEnv "SKIP_TIME_CHECK"
+
      debug' v "Building..."
      let ofn = guessOutputFilename (outputFilename args) files
-     exitCode <- Engine.compile v plan (numJobs args)
+     exitCode <- Engine.compile v plan (numJobs args) skipTimeCheck
                  (ghcPath args) ghcArgs files ofn
      exitWith exitCode

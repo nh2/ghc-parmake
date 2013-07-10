@@ -56,8 +56,9 @@ type WorkerChan = Chan WorkerTask
 workerThread :: OutputHooks -> Verbosity -> String
                 -> FilePath -> [String] -> [FilePath]
                 -> WorkerChan -> ControlChan
+                -> Bool
                 -> IO ()
-workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
+workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch skipTimeCheck
   = forever $ do
     task <- readChan wch
     case task of
@@ -99,7 +100,7 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
                    ++ replicate (16 - length tName) ' '
                    ++ " ( " ++ tSrc ++ ", " ++ tId ++ " )\n"
          isUpToDate <- upToDateCheck tId tDeps
-         if isUpToDate
+         if isUpToDate && not skipTimeCheck
            then return ExitSuccess
            else do noticeRaw outHooks verbosity msg
                    runGHC ("-c":tSrc:ghcArgs)
@@ -192,10 +193,10 @@ controlThread p m'outputFilename cch wch =
       else return exitCode
 
 -- | Given a BuildPlan, perform the compilation.
-compile :: Verbosity -> BuildPlan -> Int
+compile :: Verbosity -> BuildPlan -> Int -> Bool
            -> FilePath -> [String] -> [FilePath] -> Maybe FilePath
            -> IO ExitCode
-compile verbosity plan numJobs ghcPath ghcArgs files m'outputFilename =
+compile verbosity plan numJobs skipTimeCheck ghcPath ghcArgs files m'outputFilename =
   do
     -- Init comm. channels
     workerChan  <- newChan
@@ -207,7 +208,7 @@ compile verbosity plan numJobs ghcPath ghcArgs files m'outputFilename =
       (\n -> forkIO $ workerThread
              (logThreadOutputHooks
               (if numJobs == 1 then "" else "[" ++ show n ++ "]") logChan)
-             verbosity totNum ghcPath ghcArgs files workerChan controlChan)
+             verbosity totNum ghcPath ghcArgs files workerChan controlChan skipTimeCheck)
 
     -- Fork off log thread.
     _ <- ($) forkIO $ logThread logChan
