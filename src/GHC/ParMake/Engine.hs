@@ -4,8 +4,7 @@ module GHC.ParMake.Engine
        where
 
 import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, forM_, when)
-import System.Environment (lookupEnv)
+import Control.Monad (foldM, forever, forM_)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
 
