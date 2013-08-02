@@ -22,7 +22,7 @@ import Data.IntSet (IntSet)
 import Data.List (find, groupBy, sortBy)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Ord (comparing)
-import System.FilePath (replaceExtension, takeExtension)
+import System.FilePath (replaceExtension, takeExtension, isRelative)
 
 type TargetId = FilePath
 data Target = Target TargetId  -- ^ Target (e.g. 'Main.o')
@@ -131,9 +131,17 @@ new deps = BuildPlan graph graphRev targetIdToVertex vertexToTargetId
     --       We should raise some error when that happens.
     readySet = IntSet.fromList . map fst . filter hasSingleSourceDep
                . zip [0..] $ targets
-      where hasSingleSourceDep (_,t) = case depends t of
+      where hasSingleSourceDep (_,t) = case filter isHomeFile (depends t) of
               [d] -> (takeExtension d) `elem` sourceExts
               _   -> False
+            -- Tells whether the given file is "home" file (i.e. a file of
+            -- *this* package we're building as opposed to from the system
+            -- or another package.)
+            -- TODO: We rely on non-home files to have absolute and home files
+            --       to have relative paths. ghc -M seems to do that this way,
+            --       but that is not for sure. Find out if this is safe!
+            isHomeFile :: FilePath -> Bool
+            isHomeFile path = isRelative path
     buildingSet = IntSet.empty
 
     targetTable   = Array.listArray bounds targets

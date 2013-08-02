@@ -57,7 +57,8 @@ getModuleDeps :: Verbosity
 getModuleDeps v ghcPath ghcArgs files =
   withSystemTempDirectory "ghc-parmake" $ \tmpDir -> do
     let tmpFile = tmpDir </> "depends.mk"
-    let ghcArgs' = files ++ ("-M":"-dep-makefile":tmpFile:ghcArgs)
+    -- Pass -include-pkg-deps to also depend on external dependencies
+    let ghcArgs' = files ++ ("-M":"-dep-makefile":tmpFile:"-include-pkg-deps":ghcArgs)
     debug' v $ "Running compiler with -M to get module deps: "
                ++ ghcPath ++ " " ++ show ghcArgs'
     exitCode <- runProcess defaultOutputHooks Nothing ghcPath ghcArgs'
