@@ -4,7 +4,7 @@ module GHC.ParMake.Engine
        where
 
 import Control.Concurrent (forkIO, newChan, readChan, writeChan, Chan)
-import Control.Monad (foldM, forever, forM_)
+import Control.Monad (foldM, forever, forM_, when)
 import System.Exit (ExitCode(..))
 import System.FilePath (dropExtension)
 
@@ -114,12 +114,15 @@ data ControlMessage = ModuleCompiled Target | BuildCompleted
                     deriving (Show)
 type ControlChan = Chan ControlMessage
 
-controlThread :: BuildPlan -> Maybe FilePath -> ControlChan -> WorkerChan
+controlThread :: OutputHooks -> Verbosity -> BuildPlan -> Maybe FilePath
+                 -> ControlChan -> WorkerChan
                  -> IO ExitCode
-controlThread p mOutputFilename cch wch =
+controlThread outHooks verbosity p mOutputFilename cch wch =
   do let rdy = BuildPlan.ready p
      -- Give worker threads initial tasks.
      curNum <- postTasks rdy 1
+
+     debugNumReady (length rdy)
 
      -- Shouldn't happen
      if null rdy
@@ -166,13 +169,16 @@ controlThread p mOutputFilename cch wch =
                             error $ "GHC.ParMake.Engine.controlThread: "
                             ++ "Unexpected BuildProgram response: " ++ show x
 
-                  else go plan'' curNum'
+                  else do when (not $ null rdy) $ debugNumReady (length rdy)
+                          go plan'' curNum'
 
            CompileFailed t c -> waitAndExit (BuildPlan.markCompleted plan t) c
 
            BuildCompleted  -> return ExitSuccess
            BuildFailed c   -> return c
 
+
+    debugNumReady n = debug outHooks verbosity $ "Ready to compile: " ++ show n
 
     -- One of the worker threads encountered an error. Wait for all threads to
     -- finish.
@@ -215,8 +221,10 @@ compile verbosity plan numJobs ghcPath ghcArgs files mOutputFilename =
     -- Fork off log thread.
     _ <- ($) forkIO $ logThread logChan
 
+    let logHooks = logThreadOutputHooks "" logChan
+
     -- Start the control thread.
-    controlThread plan mOutputFilename controlChan workerChan
+    controlThread logHooks verbosity plan mOutputFilename controlChan workerChan
 
     -- Note that we don't explicitly shut down the worker threads;
     -- the runtime kills them when the main thread exits.
