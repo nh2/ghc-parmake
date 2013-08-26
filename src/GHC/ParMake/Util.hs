@@ -10,17 +10,14 @@ module GHC.ParMake.Util (runProcess, upToDateCheck
                         , silent, normal, verbose, deafening)
        where
 
-import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, forM, when)
 import qualified Control.Exception as Exception
 import System.Directory (doesFileExist, getModificationTime)
 import System.Exit (ExitCode(..))
 import System.IO ( hClose, hGetContents, hFlush, hPutStr, hPutStrLn
                    , hSetBinaryMode, stderr, stdout)
 import System.Process (runInteractiveProcess, waitForProcess)
-
-import GHC.ParMake.Common (firstM)
 
 -- Copied from Distribution.Verbosity.
 data Verbosity = Silent | Normal | Verbose | Deafening
@@ -189,7 +186,7 @@ wrapLine width = wrap 0 []
         wrap _ line [] = [reverse line]
 
 
-data UpToDateStatus = UpToDate | TargetDoesNotExist | NewerDependency FilePath
+data UpToDateStatus = UpToDate | TargetDoesNotExist | NewerDependencies [FilePath]
                     deriving (Eq, Ord, Show)
 
 
@@ -202,9 +199,11 @@ upToDateCheck tId tDeps =
        else do tModTime <- getModificationTime tId
                -- TODO: Is this check correct? How GHC does this?
 
-               -- Find the first dependency that is newer than the target.
-               mNewerDep <- firstM tDeps (\d -> (> tModTime) <$> getModificationTime d)
+               -- Find all dependencies newer than the target.
+               depTimes <- forM tDeps $ \d -> do
+                 mtime <- getModificationTime d
+                 return (d, mtime)
 
-               return $ case mNewerDep of
-                 Just d  -> NewerDependency d
-                 Nothing -> UpToDate
+               return $ case filter ((> tModTime) . snd) depTimes of
+                 [] -> UpToDate
+                 ds -> NewerDependencies (map fst ds)

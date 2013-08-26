@@ -102,9 +102,9 @@ workerThread outHooks verbosity totNum ghcPath ghcArgs files wch cch
                                         runGHC ("-c":tSrc:ghcArgs)
          upToDateStatus <- upToDateCheck tId tDeps
          case upToDateStatus of
-           UpToDate             -> return ExitSuccess
-           TargetDoesNotExist   -> compileBecause "new"
-           NewerDependency file -> compileBecause (file ++ " changed")
+           UpToDate               -> return ExitSuccess
+           TargetDoesNotExist     -> compileBecause "new"
+           NewerDependencies deps -> compileBecause (show deps ++ " changed")
              where
 
     buildProgram :: FilePath -> IO ExitCode
